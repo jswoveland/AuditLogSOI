@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "AuditLogSOI": {
+      "commandName": "Project",
+      "remoteDebugEnabled": true,
+      "remoteDebugMachine": "SEPS:4026",
+      "authenticationMode": "Windows"
+    }
+  }
+}
