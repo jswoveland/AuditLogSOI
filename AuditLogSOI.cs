@@ -10,6 +10,7 @@
 // See the use restrictions at <your Enterprise SDK install location>/userestrictions.txt.
 // 
 
+using ArcGisPbf;
 using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.esriSystem;
 using ESRI.ArcGIS.Geodatabase;
@@ -17,15 +18,20 @@ using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.Server;
 using ESRI.Server.SOESupport;
 using ESRI.Server.SOESupport.SOI;
+using EsriPBuffer;
+using Google.Protobuf;
+using Google.Protobuf.Reflection;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
-using EsriPBuffer;
-using Google.Protobuf;
+//using System.Text.Json;
+//using System.Text.Json.Nodes;
 
 
 //This is REST SOE template of Enterprise SDK
@@ -84,8 +90,7 @@ namespace AuditLogSOI
             string operationInput, string outputFormat, string requestProperties, out string responseProperties)
         {
             responseProperties = null;
-            _serverLog.LogMessage(ServerLogger.msgType.infoStandard, _soiName + ".HandleRESTRequest()",
-                200, "Request received in Sample Object Interceptor for handleRESTRequest");
+            // _serverLog.LogMessage(ServerLogger.msgType.infoStandard, _soiName + ".HandleRESTRequest()", 200, "Request received in Sample Object Interceptor for handleRESTRequest");
 
             IRESTRequestHandler restRequestHandler = _restSOIHelper.FindRequestHandlerDelegate<IRESTRequestHandler>();
             if (restRequestHandler == null)
@@ -100,28 +105,55 @@ namespace AuditLogSOI
                 string userAction = String.Format("SOI Intercepted Query. Capabilities={0}, resourceName={1}, operationName={2}, operationInput={3}, outputFormat={4}, " +
                     "requestProperties={5}, loginUser={6}", Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties, loginUser);
 
-                _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200, userAction);
-
-                byte[] originalResponse = restRequestHandler.HandleRESTRequest(Capabilities, resourceName, operationName, operationInput, "pbf", requestProperties, out responseProperties);
+                // _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200, userAction);
 
                 string resultJSONStr = null;
+                List<string> globalIds = new List<string>();
 
-                if(outputFormat == "pbf") { 
-                    var featureCollection = FeatureCollectionPBuffer.Parser.ParseFrom(originalResponse);
-                    resultJSONStr = JsonFormatter.Default.Format(featureCollection);
-                    
-                }else if (outputFormat == "json")
+                byte[] originalResponse = restRequestHandler.HandleRESTRequest(Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties, out responseProperties);
+
+                if (outputFormat == "pbf")
+                {
+                    var decodedPBF = new FeatureCollectionDecoder().Decode(originalResponse); //FeatureCollectionPBuffer.Parser.ParseFrom(originalResponse);
+                    decodedPBF.FeatureCollection.Features.ToList().ForEach(feature =>
+                    {
+                        if (feature.Properties != null && feature.Properties.TryGetValue("GlobalID", out var globalIdValue) && globalIdValue != null)
+                        {
+                            globalIds.Add(globalIdValue.ToString());
+                        }
+                    });
+                }
+                else if (outputFormat == "json")
                 {
                     resultJSONStr = System.Text.Encoding.UTF8.GetString(originalResponse);
+
+                    if (!String.IsNullOrEmpty(resultJSONStr))
+                    {
+                        ESRI.Server.SOESupport.JsonObject resultJSON = new ESRI.Server.SOESupport.JsonObject(resultJSONStr);
+                        object[] features;
+                        if (resultJSON != null && resultJSON.TryGetArray("features", out features))
+                        {
+                            foreach (var feature in features)
+                            {
+                                JsonObject jsonFeature = feature as JsonObject;
+                                JsonObject attributes;
+                                if (jsonFeature != null && jsonFeature.TryGetJsonObject("attributes", out attributes))
+                                {
+                                    if (attributes != null && attributes.TryGetString("GlobalID", out var globalIdValue))
+                                    {
+                                        globalIds.Add(globalIdValue);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                if(!String.IsNullOrEmpty(resultJSONStr))
-                {
-                    _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200, resultJSONStr);
-                     JsonObject resultJSON = new JsonObject(resultJSONStr);
+                // Log the username and the GlobalIDs of the features returned
+                if(globalIds.Count > 0) { 
+                    _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200,
+                        String.Format("User: {0} | Resource: {1} | GlobalIDs: {2}", SOIBase.GetServerEnvironment().UserInfo.Name, resourceName,
+                        String.Join(", ", globalIds)));
                 }
-
-
-
             }
             else
             {
@@ -151,7 +183,7 @@ namespace AuditLogSOI
              * Add code to manipulate requests here
              */
 
-            IWebRequestHandler webRequestHandler = _restSOIHelper.FindRequestHandlerDelegate<IWebRequestHandler>();
+                    IWebRequestHandler webRequestHandler = _restSOIHelper.FindRequestHandlerDelegate<IWebRequestHandler>();
             if (webRequestHandler != null)
             {
                 return webRequestHandler.HandleStringWebRequest(
