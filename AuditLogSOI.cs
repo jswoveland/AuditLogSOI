@@ -8,34 +8,23 @@
 // notice and use restrictions.
 // 
 // See the use restrictions at <your Enterprise SDK install location>/userestrictions.txt.
+//
+// Implementation of an ArcGIS Server Object Interceptor using the ArcGIS Enterprise SDK for .NET. 
+// SOI logs the username, resource (layer ids), and configurable attribute of features returned
+// from the query to a Map (or Feature) Service's REST endpoint.
+//
+// THIS CODE IS PROVIDED "AS IS" AND ANY USE MADE OF IT IS AT YOUR OWN RISK.
 // 
 
 using ArcGisPbf;
-using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.esriSystem;
-using ESRI.ArcGIS.Geodatabase;
-using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.Server;
 using ESRI.Server.SOESupport;
 using ESRI.Server.SOESupport.SOI;
-using EsriPBuffer;
-using Google.Protobuf;
-using Google.Protobuf.Reflection;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
-using System.Text;
-
-//This is REST SOE template of Enterprise SDK
-
-//TODO: sign the project (project properties > signing tab > sign the assembly)
-//      this is strongly suggested if the dll will be registered using regasm.exe <your>.dll /codebase
 
 
 namespace AuditLogSOI
@@ -149,7 +138,7 @@ namespace AuditLogSOI
                             }
                         }
                     }
-                    // Log the username and the GlobalIDs of the features returned
+                    // Log the username and the <AttributeToLog> of the features returned
                     if(objectIds.Count > 0) { 
                         _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200,
                             String.Format("User: {0} | Resource: {1} | {2}s: {3}",
