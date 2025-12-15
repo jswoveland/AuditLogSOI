@@ -28,6 +28,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 using System.Text;
 //using System.Text.Json;
@@ -48,10 +49,11 @@ namespace AuditLogSOI
     [ServerObjectInterceptor("MapServer",
         Description = "",
         DisplayName = "AuditLogSOI",
-        Properties = "",
+        Properties = "AttributeToLog=OBJECTID",
         SupportsSharedInstances = false)]
-    public class AuditLogSOI : IServerObjectExtension, IRESTRequestHandler, IWebRequestHandler, IRequestHandler2, IRequestHandler
+    public class AuditLogSOI : IServerObjectExtension, IRESTRequestHandler, IWebRequestHandler, IRequestHandler2, IRequestHandler, IObjectConstruct
     {
+        private string _attributeToLog;
         private string _soiName;
         private IServerObjectHelper _soHelper;
         private ServerLogger _serverLog;
@@ -69,6 +71,12 @@ namespace AuditLogSOI
             _restSOIHelper = new RestSOIHelper(pSOH);
             _serverLog.LogMessage(ServerLogger.msgType.infoStandard, _soiName + ".init()", 200, "Initialized " + _soiName + " SOI.");
         }
+
+        public void Construct(IPropertySet props)
+        {
+            _attributeToLog = props.GetProperty("AttributeToLog") as string;
+        }
+
 
         public void Shutdown()
         {
@@ -90,77 +98,80 @@ namespace AuditLogSOI
             string operationInput, string outputFormat, string requestProperties, out string responseProperties)
         {
             responseProperties = null;
-            // _serverLog.LogMessage(ServerLogger.msgType.infoStandard, _soiName + ".HandleRESTRequest()", 200, "Request received in Sample Object Interceptor for handleRESTRequest");
 
             IRESTRequestHandler restRequestHandler = _restSOIHelper.FindRequestHandlerDelegate<IRESTRequestHandler>();
             if (restRequestHandler == null)
                 return null;
 
-            /*
-            * Add code to manipulate REST requests here
-            */
-            if (operationName == "query")
-            {
-                var loginUser = "current user=" + SOIBase.GetServerEnvironment().UserInfo.Name;
-                string userAction = String.Format("SOI Intercepted Query. Capabilities={0}, resourceName={1}, operationName={2}, operationInput={3}, outputFormat={4}, " +
-                    "requestProperties={5}, loginUser={6}", Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties, loginUser);
+            try { 
 
-                // _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200, userAction);
-
-                string resultJSONStr = null;
-                List<string> globalIds = new List<string>();
-
-                byte[] originalResponse = restRequestHandler.HandleRESTRequest(Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties, out responseProperties);
-
-                if (outputFormat == "pbf")
+                if (operationName == "query")
                 {
-                    var decodedPBF = new FeatureCollectionDecoder().Decode(originalResponse); //FeatureCollectionPBuffer.Parser.ParseFrom(originalResponse);
-                    decodedPBF.FeatureCollection.Features.ToList().ForEach(feature =>
-                    {
-                        if (feature.Properties != null && feature.Properties.TryGetValue("GlobalID", out var globalIdValue) && globalIdValue != null)
-                        {
-                            globalIds.Add(globalIdValue.ToString());
-                        }
-                    });
-                }
-                else if (outputFormat == "json")
-                {
-                    resultJSONStr = System.Text.Encoding.UTF8.GetString(originalResponse);
+                    var loginUser = "current user=" + SOIBase.GetServerEnvironment().UserInfo.Name;
+                    string userAction = String.Format("SOI Intercepted Query. Capabilities={0}, resourceName={1}, operationName={2}, operationInput={3}, outputFormat={4}, " +
+                        "requestProperties={5}, loginUser={6}", Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties, loginUser);
 
-                    if (!String.IsNullOrEmpty(resultJSONStr))
+                    string resultJSONStr = null;
+                    List<string> objectIds = new List<string>();
+
+                    byte[] originalResponse = restRequestHandler.HandleRESTRequest(Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties, out responseProperties);
+
+                    if (outputFormat == "pbf")
                     {
-                        ESRI.Server.SOESupport.JsonObject resultJSON = new ESRI.Server.SOESupport.JsonObject(resultJSONStr);
-                        object[] features;
-                        if (resultJSON != null && resultJSON.TryGetArray("features", out features))
+                        var decodedPBF = new FeatureCollectionDecoder().Decode(originalResponse); //FeatureCollectionPBuffer.Parser.ParseFrom(originalResponse);
+                        decodedPBF.FeatureCollection.Features.ToList().ForEach(feature =>
                         {
-                            foreach (var feature in features)
+                            if (feature.Properties != null && feature.Properties.TryGetValue(_attributeToLog, out var objectIdValue) && objectIdValue != null)
                             {
-                                JsonObject jsonFeature = feature as JsonObject;
-                                JsonObject attributes;
-                                if (jsonFeature != null && jsonFeature.TryGetJsonObject("attributes", out attributes))
+                                objectIds.Add(objectIdValue.ToString());
+                            }
+                        });
+                    }
+                    else if (outputFormat == "json")
+                    {
+                        resultJSONStr = System.Text.Encoding.UTF8.GetString(originalResponse);
+
+                        if (!String.IsNullOrEmpty(resultJSONStr))
+                        {
+                            ESRI.Server.SOESupport.JsonObject resultJSON = new ESRI.Server.SOESupport.JsonObject(resultJSONStr);
+                            object[] features;
+                            if (resultJSON != null && resultJSON.TryGetArray("features", out features))
+                            {
+                                foreach (var feature in features)
                                 {
-                                    if (attributes != null && attributes.TryGetString("GlobalID", out var globalIdValue))
+                                    JsonObject jsonFeature = feature as JsonObject;
+                                    JsonObject attributes;
+                                    if (jsonFeature != null && jsonFeature.TryGetJsonObject("attributes", out attributes))
                                     {
-                                        globalIds.Add(globalIdValue);
+                                        if (attributes != null && attributes.TryGetObject(_attributeToLog, out var objectIdValue))
+                                        {
+                                            objectIds.Add(String.Format("{0}", objectIdValue));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    // Log the username and the GlobalIDs of the features returned
+                    if(objectIds.Count > 0) { 
+                        _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200,
+                            String.Format("User: {0} | Resource: {1} | {2}s: {3}",
+                                          SOIBase.GetServerEnvironment().UserInfo.Name,
+                                          resourceName,
+                                          _attributeToLog,
+                                          String.Join(", ", objectIds)));
+                    }
                 }
-                // Log the username and the GlobalIDs of the features returned
-                if(globalIds.Count > 0) { 
-                    _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200,
-                        String.Format("User: {0} | Resource: {1} | GlobalIDs: {2}", SOIBase.GetServerEnvironment().UserInfo.Name, resourceName,
-                        String.Join(", ", globalIds)));
-                }
-            }
-            else
-            {
-                string userAction = String.Format("SOI Intercepted {2}. Capabilities={0}, resourceName={1}, operationInput={3}, outputFormat={4}, " +
-                    "requestProperties={5}", Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties);
+                else
+                {
+                    string userAction = String.Format("SOI Intercepted {2}. Capabilities={0}, resourceName={1}, operationInput={3}, outputFormat={4}, " +
+                        "requestProperties={5}", Capabilities, resourceName, operationName, operationInput, outputFormat, requestProperties);
 
-                _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200, userAction);
+                    _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 200, userAction);
+                }
+            }catch (Exception ex)
+            {
+                _serverLog.LogMessage(ServerLogger.msgType.infoSimple, "HandleRESTRequest()", 500, "Error in SOI: " + ex.Message);
             }
 
             return restRequestHandler.HandleRESTRequest(
