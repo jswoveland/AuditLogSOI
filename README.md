@@ -5,7 +5,7 @@ SOI logs the username, resource (layer ids), and configurable attribute of featu
 # How to build it
 ### Prerequisites: 
 * Visual Studio (not sure what edition / version - the solution and project were built using Visual Studio Professional 2022)
-* Refer to [Esri's docs to install the ArcGIS Enterprise SDK for .Net]([url](https://developers.arcgis.com/enterprise-sdk/guide/net/installation-net/)  (Make sure you install the correct version for your instance of ArcGIS Enterprise).
+* Refer to [Esri's docs to install the ArcGIS Enterprise SDK for .Net](https://developers.arcgis.com/enterprise-sdk/guide/net/installation-net/)  (Make sure you install the correct version for your instance of ArcGIS Enterprise).
   
 1. Download this repository
 2. Open AuditLogSOI.sln in Visual Studio
