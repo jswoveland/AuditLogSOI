@@ -6,13 +6,15 @@ SOI logs the username, resource (layer ids), and configurable attribute of featu
 ### Prerequisites: 
 * Visual Studio (not sure what edition / version - the solution and project were built using Visual Studio Professional 2022)
 * Refer to [Esri's docs to install the ArcGIS Enterprise SDK for .Net](https://developers.arcgis.com/enterprise-sdk/guide/net/installation-net/)  (Make sure you install the correct version for your instance of ArcGIS Enterprise).
-  
+### Steps  
 1. Download this repository
 2. Open AuditLogSOI.sln in Visual Studio
 3. In the Solution Explorer window, right click on the Solution and select "Rebuild Solution".  This will create the .soe file that you will need to deploy to ArcGIS Server. The .soe file will be located in: <Solution Root>\bin\[Debug | Release]\net8.0\win-x64 
 
 # How to deploy it
-### Prerequisite: [Enable .NET Extension Support on ArcGIS Enterprise](https://developers.arcgis.com/enterprise-sdk/guide/net/deploy-extensions-net/)
+### Prerequisite: 
+* [Enable .NET Extension Support on ArcGIS Enterprise](https://developers.arcgis.com/enterprise-sdk/guide/net/deploy-extensions-net/)
+### Steps
 1. Log in to your ArcGIS Enterprise's ArcGIS Server Manager
 2. Select Site -> Extensions
 3. Click Add Extension -> Choose File
