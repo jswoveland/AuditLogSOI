@@ -29,3 +29,6 @@ SOI logs the username, resource (layer ids), and configurable attribute of featu
 2. Back in Server Manager, go to the log viewer, change the Log Filter level to Info
 3. Select the map service on which you enabled the SOI and click Query. 
 You should see a log state like: User: <your username> | Resource: layers/2 | OBJECTIDs: 3, 5
+
+# Credit
+I was having a heck of a time trying to process the pbf formatted repsonse data until I found <a href="https://github.com/rowanwins/arcgis-pbf-parser" target="_blank" rel="noopener">Rowan Winsemius' arcgis-pfb-parser GitHub repo</a>&nbsp;that implements a javascript PBF featurecollection parser/decoder. I used Claude AI to convert this to C#, and with a bit of spit-polishing I got it to work.
